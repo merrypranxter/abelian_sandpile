@@ -1,42 +1,38 @@
 #version 300 es
-// color.frag — map grain counts to palette colors
-//
-// Classic 4-tone: {0,1,2,3} map to 4 flat colors (the BTW canonical palette).
-// Neon ramp: log-scaled grain count drives a full 256-stop gradient; active
-// cells (>=4, currently toppling) get a bright flash.
+// color.frag — grain count → palette lookup
+// Two modes:
+//   classic 4-tone: discrete {0,1,2,3} -> 4 flat colors (canonical BTW look)
+//   neon ramp:      continuous ramp sampled by t = grains/3
+// Cells with 3 grains (on the topple threshold) get an extra glow pulse.
 precision highp float;
 
 in  vec2      vUv;
-uniform sampler2D u_state;
-uniform sampler2D u_palette;
-uniform float     u_palette_mode; // 0 = classic 4-tone, 1 = neon ramp
+uniform sampler2D u_state;      // grain count per cell
+uniform sampler2D u_palette;    // 256px continuous ramp
+uniform sampler2D u_classic4;   // 4px discrete color map
+uniform float     u_glow;       // glow strength on near-topple cells
+uniform int       u_use_classic;// 1 = discrete 4-tone, 0 = continuous
 uniform float     u_time;
 
 out vec4 fragColor;
 
 void main() {
-  float g = texture(u_state, vUv).r;
-  float t;
+    float g = texture(u_state, vUv).r;
+    vec3  col;
 
-  if (u_palette_mode < 0.5) {
-    // Classic: floor to {0,1,2,3} then normalize
-    float band = clamp(floor(g), 0.0, 3.0);
-    t = band / 3.0;
-  } else {
-    // Neon: soft log mapping so higher stacks glow brighter
-    float gC = min(g, 48.0);
-    t = gC / 48.0;
-    t = pow(t, 0.55);
-    // Shimmer on active cells
-    t += step(4.0, g) * sin(u_time * 4.0 + t * 15.0) * 0.07;
-    t = clamp(t, 0.0, 1.0);
-  }
+    if (u_use_classic == 1) {
+        // Clamp to [0,3], map to [0,1] for nearest-sampled 4px texture
+        float t = clamp(g, 0.0, 3.0) / 3.0;
+        col = texture(u_classic4, vec2(t, 0.5)).rgb;
+    } else {
+        float t = clamp(g / 3.0, 0.0, 1.0);
+        float drift = sin(u_time * 0.5 + g * 2.1) * 0.04;
+        col = texture(u_palette, vec2(clamp(t + drift, 0.0, 1.0), 0.5)).rgb;
+    }
 
-  vec3 col = texture(u_palette, vec2(t, 0.5)).rgb;
+    // Highlight cells that are sitting at 3 grains (maximum stable)
+    float atMax = (g >= 2.9 && g < 4.0) ? 1.0 : 0.0;
+    col += col * atMax * u_glow * (0.8 + 0.2 * sin(u_time * 3.0));
 
-  // Active cell highlight: cells with >=4 grains are currently toppling
-  float active = step(4.0, g);
-  col = mix(col, min(col * 2.5 + 0.15, vec3(1.0)), active * 0.5);
-
-  fragColor = vec4(col, 1.0);
+    fragColor = vec4(col, 1.0);
 }

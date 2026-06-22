@@ -1,18 +1,21 @@
-// single-source.glsl — initial condition: N grains on one cell
+// single-source.glsl — dump N grains on one cell, stabilize → classic fractal
+// Initial condition: all zeros except center cell = N.
+// Let topple.frag iterate until quiescent (all cells < 4).
 //
-// The classic BTW experiment.
-// Drop a mountain (e.g. 2^20 = 1,048,576 grains) on the center cell.
-// Let topple.frag run until quiescent.
+// The final stable configuration is THE famous fractal mandala.
+// At N = 2^20 = 1,048,576 the pattern exhibits near-perfect 4-fold symmetry
+// with fractal-like self-similarity at all scales.
 //
-// Result: a striking fractal mandala with 4-fold symmetry,
-// whose boundary is a diamond and whose interior is a self-similar
-// fractal of regions colored by grain count {0,1,2,3}.
+// Key fact: the final state is independent of toppling order (Abelian property).
+// You can topple in any sequence and always arrive at the same stable picture.
 //
-// The diamond boundary grows as O(sqrt(N));
-// at N=1,048,576 it spans approximately 512 cells on a side.
+// Initialization (JS):
+//   const data = new Float32Array(G * G);
+//   data[Math.floor(G/2)*G + Math.floor(G/2)] = N;
+//   sandpile.upload(data);
 //
-// Initialization (CPU-side, src/js/source.js):
-//   data[cy * w + cx] = totalGrains;
-//
-// Large piles require thousands of topple passes before they stabilize.
-// At 64 passes/frame a 1M-grain pile takes ~500 frames (~8s at 60fps).
+// Typical N values (all give recognizable fractals):
+//   2^17 = 131,072
+//   2^18 = 262,144
+//   2^19 = 524,288
+//   2^20 = 1,048,576  ← canonical million-grain mandala

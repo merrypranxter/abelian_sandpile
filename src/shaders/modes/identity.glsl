@@ -1,23 +1,24 @@
-// identity.glsl — the sandpile group identity element
+// identity.glsl — render the sandpile group identity element
 //
-// The set of stable configurations (grain counts 0-3 everywhere) on a
-// finite grid forms an abelian group under the operation:
-//   A + B = stabilize(A + B)
+// The set of stable sandpiles on a finite grid forms a GROUP under addition
+// modulo stabilization. The identity element of this group is a highly
+// structured fractal-like pattern that is NOT all-zeros.
 //
-// The identity element e of this group satisfies: A + e = A for all A.
-// It has a remarkable fractal structure — not at all the zero configuration.
+// To compute it, start with the all-3 configuration (maximum stable)
+// and stabilize it:
 //
-// Exact computation of e requires:
-//   1. Compute the maximal stable configuration (3 everywhere)
-//   2. Stabilize it (runs for a very long time)
-//   3. The resulting stable config is e
+//   initial[i] = 3  for all interior cells
+//   apply topple rule until quiescent
+//   result is the identity element
 //
-// Or equivalently: e = stabilize(stable_max + stable_max) - stabilize(stable_max)
-//   where subtraction is component-wise.
+// The identity element has uncanny properties:
+//   - It is symmetric (4-fold rotational symmetry)
+//   - It contains regions of all four stable states (0,1,2,3)
+//   - Adding it to any other sandpile returns that sandpile unchanged
+//   - It looks like a Buddhist mandala or integrated circuit
 //
-// For our real-time implementation we approximate with a large single-source
-// pile (~3 * (min(w,h)/4)^2 grains) which produces visually similar
-// self-similar fractal patterns.
-//
-// The true identity on a 500x500 grid looks like a central fractal
-// flanked by repeating "tiles" of self-similar sub-patterns.
+// Initialization (JS):
+//   const data = new Float32Array(G * G);
+//   for (let i = 0; i < G*G; i++) data[i] = 6.0;  // max-fill, will relax to identity
+//   sandpile.upload(data);
+//   // Then let topple.frag stabilize — takes thousands of passes

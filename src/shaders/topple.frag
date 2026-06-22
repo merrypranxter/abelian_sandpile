@@ -1,61 +1,52 @@
 #version 300 es
-// topple.frag — Abelian Sandpile / BTW chip-firing rule
-//
-// State texture: R32F, each texel = grain count at that cell.
-//
-// Rule: if grains[i] >= 4, fire one grain to each of 4 neighbors.
-//   new[i] = grains[i] - 4*(grains[i]>=4) + sum(neighbor j fires into i)
-//
-// "Abelian" property: the final stable configuration is independent
-// of the order in which topplings occur. This shader runs one pass;
-// run it K times per frame to converge large piles.
+// topple.frag — Bak-Tang-Wiesenfeld chip-firing rule (one pass)
+// State: R32F texture, one float per cell = grain count
+// Rule: if cell >= 4, topple 1 grain to each of 4 neighbors
+// Multiple passes per frame required for large piles to stabilize.
+// Boundary cells are sinks (drain to 0).
 precision highp float;
 
-in  vec2  vUv;
+in  vec2      vUv;
 uniform sampler2D u_state;
-uniform vec2      u_texel;      // 1/gridSize
-uniform float     u_time;
-uniform float     u_drop_rate;
-uniform float     u_rain_mode;  // 1 = random grain drops each pass
+uniform vec2      u_texel;       // 1/width, 1/height
+uniform float     u_rain_rate;   // grains/cell/pass (rain mode)
+uniform int       u_mode;        // 0=deterministic, 1=rain
+uniform float     u_rand_seed;
 
 out vec4 fragColor;
 
-float cell(vec2 uv) {
-  // Out-of-bounds cells are sinks (absorbing boundary)
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0.0;
-  return texture(u_state, uv).r;
-}
-
-// Fast hash for rain mode
-float hash21(vec2 p, float seed) {
-  p  = fract(p * vec2(127.34, 311.71));
-  p += dot(p, p + seed + 31.3);
-  return fract(p.x * p.y);
+float rand(vec2 co, float seed) {
+    return fract(sin(dot(co + seed, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 void main() {
-  float g  = cell(vUv);
-  float gN = cell(vUv + vec2(0.0,   u_texel.y));
-  float gS = cell(vUv + vec2(0.0,  -u_texel.y));
-  float gE = cell(vUv + vec2( u_texel.x, 0.0));
-  float gW = cell(vUv + vec2(-u_texel.x, 0.0));
+    // Own grain count
+    float own = texture(u_state, vUv).r;
 
-  // Does this cell topple?
-  float fires = step(4.0, g);
+    // Neighbor counts — edges are zero-valued sinks
+    float nN = (vUv.y + u_texel.y <= 1.0) ? texture(u_state, vUv + vec2( 0,  u_texel.y)).r : 0.0;
+    float nS = (vUv.y - u_texel.y >= 0.0) ? texture(u_state, vUv + vec2( 0, -u_texel.y)).r : 0.0;
+    float nE = (vUv.x + u_texel.x <= 1.0) ? texture(u_state, vUv + vec2( u_texel.x,  0)).r : 0.0;
+    float nW = (vUv.x - u_texel.x >= 0.0) ? texture(u_state, vUv + vec2(-u_texel.x,  0)).r : 0.0;
 
-  // Does each neighbor fire into this cell?
-  float inN = step(4.0, gN);
-  float inS = step(4.0, gS);
-  float inE = step(4.0, gE);
-  float inW = step(4.0, gW);
+    // This cell fires floor(own/4) times, each firing distributes 1 grain to each neighbor
+    float fires   = floor(own / 4.0);
 
-  float newG = g - 4.0*fires + inN + inS + inE + inW;
+    // Each neighbor contributes 1 grain per topple they make
+    float inflow  = floor(nN / 4.0) + floor(nS / 4.0)
+                  + floor(nE / 4.0) + floor(nW / 4.0);
 
-  // Rain mode: add a single grain with probability u_drop_rate per texel per pass
-  if (u_rain_mode > 0.5) {
-    float h = hash21(vUv, mod(u_time * 57.3, 1000.0));
-    if (h < u_drop_rate) newG += 1.0;
-  }
+    float next = own - 4.0 * fires + inflow;
 
-  fragColor = vec4(max(newG, 0.0), 0.0, 0.0, 1.0);
+    // Rain mode: random single-grain additions each pass
+    if (u_mode == 1) {
+        if (rand(vUv, u_rand_seed) < u_rain_rate) next += 1.0;
+    }
+
+    // Boundary sink
+    bool isBoundary = vUv.x < u_texel.x         || vUv.x > 1.0 - u_texel.x ||
+                      vUv.y < u_texel.y         || vUv.y > 1.0 - u_texel.y;
+    if (isBoundary) next = 0.0;
+
+    fragColor = vec4(max(next, 0.0), 0.0, 0.0, 1.0);
 }
