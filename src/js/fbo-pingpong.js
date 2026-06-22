@@ -1,19 +1,17 @@
-// fbo-pingpong.js — grain-state texture ping-pong
-// State is stored as R32F (float) textures: each texel = grain count at that cell.
-
+// fbo-pingpong.js — integer-valued GPGPU ping-pong for grain counts
+// Grain counts stored as floats (exact up to 2^24 with RGBA32F)
 export class FBOPingPong {
   constructor(gl, w, h) {
     this.gl = gl;
-    this.w = w;
-    this.h = h;
-    this.read  = this._makeFBO(gl, w, h);
-    this.write = this._makeFBO(gl, w, h);
+    this.w = w; this.h = h;
+    [this.read, this.write] = [this._makeFBO(w,h), this._makeFBO(w,h)];
   }
 
-  _makeFBO(gl, w, h) {
-    // R32F: exact integer storage up to 2^24 — sufficient for grain counts
+  _makeFBO(w, h) {
+    const gl = this.gl;
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
+    // R32F: single channel float — stores grain count per cell
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, w, h, 0, gl.RED, gl.FLOAT, null);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -26,28 +24,23 @@ export class FBOPingPong {
     return { fbo, tex };
   }
 
+  swap() { [this.read, this.write] = [this.write, this.read]; }
+
+  // Upload initial grain data (Float32Array, one value per cell)
   upload(data) {
-    // data: Float32Array of length w*h
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.read.tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, this.w, this.h, 0, gl.RED, gl.FLOAT, data);
   }
 
-  swap() {
-    [this.read, this.write] = [this.write, this.read];
-  }
-
   resize(w, h) {
     const gl = this.gl;
-    this._destroyFBO(this.read);
-    this._destroyFBO(this.write);
+    // Delete old
+    for (const f of [this.read, this.write]) {
+      gl.deleteTexture(f.tex);
+      gl.deleteFramebuffer(f.fbo);
+    }
     this.w = w; this.h = h;
-    this.read  = this._makeFBO(gl, w, h);
-    this.write = this._makeFBO(gl, w, h);
-  }
-
-  _destroyFBO(f) {
-    this.gl.deleteTexture(f.tex);
-    this.gl.deleteFramebuffer(f.fbo);
+    [this.read, this.write] = [this._makeFBO(w,h), this._makeFBO(w,h)];
   }
 }
