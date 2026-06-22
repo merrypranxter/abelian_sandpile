@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Abelian Sandpile</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+    canvas { display: block; position: fixed; top: 0; left: 0; }
+    #ui {
+      position: fixed; top: 0; right: 0;
+      width: 240px;
+      background: rgba(0,0,0,0.82);
+      backdrop-filter: blur(8px);
+      border-left: 1px solid rgba(255,255,255,0.07);
+      padding: 16px;
+      color: rgba(255,255,255,0.85);
+      font-size: 11px; line-height: 1.6;
+      z-index: 10; user-select: none;
+      overflow-y: auto; max-height: 100vh;
+    }
+    #ui h2 { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+      color: rgba(255,255,255,0.35); margin-bottom: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.07); padding-bottom: 8px; }
+    .section-label { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: rgba(255,255,255,0.28); margin: 12px 0 6px; }
+    .param { margin-bottom: 8px; }
+    .param label { display: flex; justify-content: space-between; margin-bottom: 3px;
+      color: rgba(255,255,255,0.65); }
+    .param label span { color: rgba(255,255,255,0.3); font-variant-numeric: tabular-nums; }
+    input[type=range] { width: 100%; height: 2px; -webkit-appearance: none;
+      background: rgba(255,255,255,0.12); outline: none; cursor: pointer; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px;
+      border-radius: 50%; background: rgba(255,255,255,0.75); cursor: pointer; }
+    .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 4px; }
+    .mbtn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.5); padding: 5px 4px; font-size: 9px; letter-spacing: 0.06em;
+      cursor: pointer; transition: all 0.12s; font-family: inherit; }
+    .mbtn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    .mbtn.active { background: rgba(255,255,255,0.13); border-color: rgba(255,255,255,0.28); color: #fff; }
+    .action-btn { width: 100%; margin-top: 4px; background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.7);
+      padding: 6px; font-size: 10px; cursor: pointer; font-family: inherit;
+      letter-spacing: 0.08em; transition: all 0.12s; }
+    .action-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+    #status { font-size: 9px; color: rgba(255,200,80,0.6); margin-top: 6px; min-height: 14px; letter-spacing: 0.05em; }
+    .fps { position: fixed; bottom: 8px; left: 8px; font-family: monospace; font-size: 10px;
+      color: rgba(255,255,255,0.2); z-index: 10; }
+    #hint { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
+      font-family: monospace; font-size: 9px; color: rgba(255,255,255,0.18); z-index: 10; letter-spacing: 0.1em; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h2>Abelian Sandpile</h2>
+
+    <div class="section-label">Regime</div>
+    <div class="btn-grid">
+      <button class="mbtn active" data-regime="million_grain_mandala">mandala</button>
+      <button class="mbtn" data-regime="avalanche_rain">rain</button>
+      <button class="mbtn" data-regime="identity_glyph">identity</button>
+      <button class="mbtn" data-regime="psychedelic_recount">psychedelic</button>
+    </div>
+
+    <div class="section-label">Simulation</div>
+    <div class="param">
+      <label>grid size <span id="v-grid_size">512</span></label>
+      <input type="range" id="grid_size" min="128" max="1024" step="128" value="512">
+    </div>
+    <div class="param">
+      <label>passes/frame <span id="v-passes_per_frame">64</span></label>
+      <input type="range" id="passes_per_frame" min="1" max="256" step="1" value="64">
+    </div>
+    <div class="param">
+      <label>drop rate (rain) <span id="v-drop_rate">0.01</span></label>
+      <input type="range" id="drop_rate" min="0.001" max="0.1" step="0.001" value="0.01">
+    </div>
+
+    <div class="section-label">Visual</div>
+    <div class="param">
+      <label>bloom <span id="v-bloom">0.4</span></label>
+      <input type="range" id="bloom" min="0" max="1" step="0.01" value="0.4">
+    </div>
+    <div class="param">
+      <label>chromatic ab. <span id="v-chromatic">0.1</span></label>
+      <input type="range" id="chromatic" min="0" max="1" step="0.01" value="0.1">
+    </div>
+    <div class="param">
+      <label>vignette <span id="v-vignette">0.5</span></label>
+      <input type="range" id="vignette" min="0" max="1" step="0.01" value="0.5">
+    </div>
+
+    <div class="section-label">Control</div>
+    <button class="action-btn" id="btn-reset">RESET / RESTART</button>
+    <button class="action-btn" id="btn-drop">DROP 65536 GRAINS</button>
+    <div id="status">initializing...</div>
+  </div>
+
+  <div class="fps" id="fps">-- fps</div>
+  <div id="hint">the order of toppling does not matter &mdash; the fractal does not care</div>
+
+  <script src="src/js/main.js" type="module"></script>
+</body>
+</html>
